@@ -2050,11 +2050,14 @@ static bool getwork_decode(json_t *res_val, struct work *work)
 		return false;
 	}
 
+	/*
+	No midstate in DCR
 	if (!jobj_binary(res_val, "midstate", work->midstate, sizeof(work->midstate), false)) {
 		// Calculate it ourselves
 		applog(LOG_DEBUG, "Calculating midstate locally");
 		calc_midstate(work);
 	}
+	*/
 
 	if (unlikely(!jobj_binary(res_val, "target", work->target, sizeof(work->target), true))) {
 		applog(LOG_ERR, "JSON inval target");
@@ -2080,6 +2083,7 @@ static bool work_decode(struct pool *pool, struct work *work, json_t *val)
 		goto out;
 	}
 
+	/* GBT disabled for DCR
 	if (pool->has_gbt) {
 		if (unlikely(!gbt_decode(pool, res_val)))
 			goto out;
@@ -2087,6 +2091,8 @@ static bool work_decode(struct pool *pool, struct work *work, json_t *val)
 		ret = true;
 		goto out;
 	} else if (unlikely(!getwork_decode(res_val, work)))
+	*/
+	if (unlikely(!getwork_decode(res_val, work)))
 		goto out;
 
 	memset(work->hash, 0, sizeof(work->hash));
@@ -2762,15 +2768,42 @@ static bool submit_upstream_work(struct work *work, CURL *curl, bool resubmit)
 	char worktime[200] = "";
 	struct timeval now;
 	double dev_runtime;
+	uint32_t data32[48];
+	char data8[192];
+	uint32_t *data_cast_as_32;
+	int i;
 
 	cgpu = get_thr_cgpu(thr_id);
 
-	endian_flip128(work->data, work->data);
-
+	/* flip endianness of the nonce */
+	data_cast_as_32 = (uint32_t*) work->data;
+	for (i = 0; i < 48; ++i) {
+		data32[i] = data_cast_as_32[i];
+		if (i == 35) {
+			data32[i] = swab32(data32[i]);
+		}
+	}
+	
+	applog(LOG_DEBUG, "Submitting upstream work (backwards uint32 endianness shown)");
+	applog(LOG_DEBUG, "Sub0: %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x", data32[0], data32[1], data32[2], data32[3], data32[4], data32[5], data32[6], data32[7], data32[8], data32[9],
+		data32[10], data32[11], data32[12], data32[13], data32[14], data32[15], data32[16], data32[17], data32[18], data32[19]);
+	applog(LOG_DEBUG, "Sub1: %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x", data32[20], data32[21], data32[22], data32[23], data32[24], data32[25], data32[26], data32[27], data32[28], data32[29],
+		data32[30], data32[31], data32[32], data32[33], data32[34], data32[35], data32[36], data32[37], data32[38], data32[39]);
+	applog(LOG_DEBUG, "Sub2: %x %x %x %x %x %x %x %x\n", data32[40], data32[41], data32[42], data32[43], data32[44], data32[45], data32[46], data32[47]);
+	
+	/* Copy to byte array */
+	for (i = 0; i < 48; ++i) {
+		data8[i*4+0] = (data32[i] & 0x000000ff);
+		data8[i*4+1] = (data32[i] & 0x0000ff00) >> 8;
+		data8[i*4+2] = (data32[i] & 0x00ff0000) >> 16;
+		data8[i*4+3] = (data32[i] & 0xff000000) >> 24;
+	}
+	
 	/* build hex string */
-	hexstr = bin2hex(work->data, sizeof(work->data));
+	hexstr = bin2hex(data8, sizeof(data8));
 
 	/* build JSON-RPC request */
+	/* dcr shouldn't hit this yet */
 	if (work->gbt) {
 		char *gbt_block, *varint;
 		unsigned char data[80];
@@ -3469,7 +3502,7 @@ static void roll_work(struct work *work)
 	uint32_t *work_ntime;
 	uint32_t ntime;
 
-	work_ntime = (uint32_t *)(work->data + 68);
+	work_ntime = (uint32_t *)(work->data + 136);
 	ntime = be32toh(*work_ntime);
 	ntime++;
 	*work_ntime = htobe32(ntime);
@@ -6178,7 +6211,7 @@ void inc_hw_errors(struct thr_info *thr)
 /* Fills in the work nonce and builds the output data in work->hash */
 static void rebuild_nonce(struct work *work, uint32_t nonce)
 {
-	uint32_t *work_nonce = (uint32_t *)(work->data + 64 + 12);
+	uint32_t *work_nonce = (uint32_t *)(work->data + 140);
 
 	*work_nonce = htole32(nonce);
 
@@ -8513,7 +8546,9 @@ begin_bench:
 		}
 		pool = select_pool(lagging);
 retry:
-		if (pool->has_stratum) {
+		/* Stratum is current disabled for DCR */
+		/* if (pool->has_stratum) {            */
+		if (false) {
 			while (!pool->stratum_active || !pool->stratum_notify) {
 				struct pool *altpool = select_pool(true);
 
@@ -8539,7 +8574,9 @@ retry:
 #ifdef HAVE_LIBCURL
 		struct curl_ent *ce;
 
-		if (pool->has_gbt) {
+		/* GBT is current disabled for DCR */
+		/* if (pool->has_gbt) {            */
+		if (false) {
 			while (pool->idle) {
 				struct pool *altpool = select_pool(true);
 

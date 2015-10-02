@@ -43,13 +43,8 @@
 extern "C"{
 #endif
 
-#if SPH_SMALL_FOOTPRINT && !defined SPH_SMALL_FOOTPRINT_BLAKE
 #define SPH_SMALL_FOOTPRINT_BLAKE   1
-#endif
-
-#if SPH_SMALL_FOOTPRINT_BLAKE
 #define SPH_COMPACT_BLAKE_32   1
-#endif
 
 #ifdef _MSC_VER
 #pragma warning (disable: 4146)
@@ -68,8 +63,6 @@ static const sph_u32 IV256[8] = {
 	SPH_C32(0x510E527F), SPH_C32(0x9B05688C),
 	SPH_C32(0x1F83D9AB), SPH_C32(0x5BE0CD19)
 };
-
-#if SPH_COMPACT_BLAKE_32
 
 static const unsigned sigma[14][16] = {
 	{  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15 },
@@ -100,7 +93,6 @@ static const unsigned sigma[14][16] = {
   6 15 14  9 11  3  0  8 12  2 13  7  1  4 10  5
  10  2  8  4  7  6  1  5 15 11  9 14  3 12 13  0
 */
-#endif
 
 #define Z00   0
 #define Z01   1
@@ -297,8 +289,6 @@ static const unsigned sigma[14][16] = {
 #define CSE   SPH_C32(0x3F84D5B5)
 #define CSF   SPH_C32(0xB5470917)
 
-#if SPH_COMPACT_BLAKE_32
-
 static const sph_u32 CS[16] = {
 	SPH_C32(0x243F6A88), SPH_C32(0x85A308D3),
 	SPH_C32(0x13198A2E), SPH_C32(0x03707344),
@@ -310,8 +300,6 @@ static const sph_u32 CS[16] = {
 	SPH_C32(0x3F84D5B5), SPH_C32(0xB5470917)
 };
 
-#endif
-
 #define GS(m0, m1, c0, c1, a, b, c, d)   do { \
 		a = SPH_T32(a + b + (m0 ^ c1)); \
 		d = SPH_ROTR32(d ^ a, 16); \
@@ -322,8 +310,6 @@ static const sph_u32 CS[16] = {
 		c = SPH_T32(c + d); \
 		b = SPH_ROTR32(b ^ c, 7); \
 	} while (0)
-
-#if SPH_COMPACT_BLAKE_32
 
 #define ROUND_S(r)   do { \
 		GS(M[sigma[r][0x0]], M[sigma[r][0x1]], \
@@ -343,21 +329,6 @@ static const sph_u32 CS[16] = {
 		GS(M[sigma[r][0xE]], M[sigma[r][0xF]], \
 			CS[sigma[r][0xE]], CS[sigma[r][0xF]], V3, V4, V9, VE); \
 	} while (0)
-
-#else
-
-#define ROUND_S(r)   do { \
-		GS(Mx(r, 0), Mx(r, 1), CSx(r, 0), CSx(r, 1), V0, V4, V8, VC); \
-		GS(Mx(r, 2), Mx(r, 3), CSx(r, 2), CSx(r, 3), V1, V5, V9, VD); \
-		GS(Mx(r, 4), Mx(r, 5), CSx(r, 4), CSx(r, 5), V2, V6, VA, VE); \
-		GS(Mx(r, 6), Mx(r, 7), CSx(r, 6), CSx(r, 7), V3, V7, VB, VF); \
-		GS(Mx(r, 8), Mx(r, 9), CSx(r, 8), CSx(r, 9), V0, V5, VA, VF); \
-		GS(Mx(r, A), Mx(r, B), CSx(r, A), CSx(r, B), V1, V6, VB, VC); \
-		GS(Mx(r, C), Mx(r, D), CSx(r, C), CSx(r, D), V2, V7, V8, VD); \
-		GS(Mx(r, E), Mx(r, F), CSx(r, E), CSx(r, F), V3, V4, V9, VE); \
-	} while (0)
-
-#endif
 
 #define DECL_STATE32 \
 	sph_u32 H0, H1, H2, H3, H4, H5, H6, H7; \
@@ -397,8 +368,6 @@ static const sph_u32 CS[16] = {
 		(state)->T1 = T1; \
 	} while (0)
 
-#if SPH_COMPACT_BLAKE_32
-
 #define COMPRESS32   do { \
 		sph_u32 M[16]; \
 		sph_u32 V0, V1, V2, V3, V4, V5, V6, V7; \
@@ -436,7 +405,7 @@ static const sph_u32 CS[16] = {
 		M[0xD] = sph_dec32be_aligned(buf + 52); \
 		M[0xE] = sph_dec32be_aligned(buf + 56); \
 		M[0xF] = sph_dec32be_aligned(buf + 60); \
-		for (r = 0; r < 8; r ++) \
+		for (r = 0; r < 14; r ++) \
 			ROUND_S(r); \
 		H0 ^= S0 ^ V0 ^ V8; \
 		H1 ^= S1 ^ V1 ^ V9; \
@@ -447,65 +416,6 @@ static const sph_u32 CS[16] = {
 		H6 ^= S2 ^ V6 ^ VE; \
 		H7 ^= S3 ^ V7 ^ VF; \
 	} while (0)
-
-#else
-
-#define COMPRESS32   do { \
-		sph_u32 M0, M1, M2, M3, M4, M5, M6, M7; \
-		sph_u32 M8, M9, MA, MB, MC, MD, ME, MF; \
-		sph_u32 V0, V1, V2, V3, V4, V5, V6, V7; \
-		sph_u32 V8, V9, VA, VB, VC, VD, VE, VF; \
-		V0 = H0; \
-		V1 = H1; \
-		V2 = H2; \
-		V3 = H3; \
-		V4 = H4; \
-		V5 = H5; \
-		V6 = H6; \
-		V7 = H7; \
-		V8 = S0 ^ CS0; \
-		V9 = S1 ^ CS1; \
-		VA = S2 ^ CS2; \
-		VB = S3 ^ CS3; \
-		VC = T0 ^ CS4; \
-		VD = T0 ^ CS5; \
-		VE = T1 ^ CS6; \
-		VF = T1 ^ CS7; \
-		M0 = sph_dec32be_aligned(buf +  0); \
-		M1 = sph_dec32be_aligned(buf +  4); \
-		M2 = sph_dec32be_aligned(buf +  8); \
-		M3 = sph_dec32be_aligned(buf + 12); \
-		M4 = sph_dec32be_aligned(buf + 16); \
-		M5 = sph_dec32be_aligned(buf + 20); \
-		M6 = sph_dec32be_aligned(buf + 24); \
-		M7 = sph_dec32be_aligned(buf + 28); \
-		M8 = sph_dec32be_aligned(buf + 32); \
-		M9 = sph_dec32be_aligned(buf + 36); \
-		MA = sph_dec32be_aligned(buf + 40); \
-		MB = sph_dec32be_aligned(buf + 44); \
-		MC = sph_dec32be_aligned(buf + 48); \
-		MD = sph_dec32be_aligned(buf + 52); \
-		ME = sph_dec32be_aligned(buf + 56); \
-		MF = sph_dec32be_aligned(buf + 60); \
-		ROUND_S(0); \
-		ROUND_S(1); \
-		ROUND_S(2); \
-		ROUND_S(3); \
-		ROUND_S(4); \
-		ROUND_S(5); \
-		ROUND_S(6); \
-		ROUND_S(7); \
-		H0 ^= S0 ^ V0 ^ V8; \
-		H1 ^= S1 ^ V1 ^ V9; \
-		H2 ^= S2 ^ V2 ^ VA; \
-		H3 ^= S3 ^ V3 ^ VB; \
-		H4 ^= S0 ^ V4 ^ VC; \
-		H5 ^= S1 ^ V5 ^ VD; \
-		H6 ^= S2 ^ V6 ^ VE; \
-		H7 ^= S3 ^ V7 ^ VF; \
-	} while (0)
-
-#endif
 
 static const sph_u32 salt_zero_small[4] = { 0, 0, 0, 0 };
 
@@ -658,22 +568,36 @@ static const uint32_t diff1targ_blake256 = 0x000000ff;
 
 void blake256_regenhash(struct work *work)
 {
-	uint32_t data[20];
-	uint32_t *nonce = (uint32_t *)(work->data + 76);
+	uint32_t data[45];
+	uint32_t *nonce = (uint32_t *)(work->data + 140);
 	uint32_t *ohash = (uint32_t *)(work->hash);
 
-	be32enc_vect(data, (const uint32_t *)work->data, 19);
-	data[19] = htobe32(*nonce);
+	be32enc_vect(data, (const uint32_t *)work->data, 45);
+	data[35] = *nonce; //htobe32(*nonce);
         
-	applog(LOG_DEBUG, "timestamp %d", data[17]);
+	applog(LOG_DEBUG, "timestamp %x", data[34]);
+	applog(LOG_DEBUG, "lucky nonce %x", data[35]);
         
         applog(LOG_DEBUG, "Dat0: %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x", data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], data[9],
             data[10], data[11], data[12], data[13], data[14], data[15], data[16], data[17], data[18], data[19]);
-        
+        applog(LOG_DEBUG, "Dat1: %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x", data[20], data[21], data[22], data[23], data[24], data[25], data[26], data[27], data[28], data[29],
+            data[30], data[31], data[32], data[33], data[34], data[35], data[36], data[37], data[38], data[39]);
+        applog(LOG_DEBUG, "Dat2: %x %x %x %x %x\n", data[40], data[41], data[42], data[43], data[44]);
+
+
+	uint32_t swap[45];
+	flip180(swap, data);
+	int i;
+	for (i=0; i<45; ++i) {
+		data[i] = swap[i];
+	}
+		
     sph_blake256_context     ctx_blake;
     sph_blake256_init(&ctx_blake);
-    sph_blake256 (&ctx_blake, (unsigned char *)data, 80);
+    sph_blake256 (&ctx_blake, (unsigned char *)data, 180);
     sph_blake256_close(&ctx_blake, (unsigned char *)ohash);
+	
+	applog(LOG_DEBUG, "Hash produced: %x %x %x %x %x %x %x %x", ohash[0], ohash[1], ohash[2], ohash[3], ohash[4], ohash[5], ohash[6], ohash[7]);
     
     uint32_t *o = ohash;
 }
@@ -681,19 +605,22 @@ void blake256_regenhash(struct work *work)
 /* Used externally as confirmation of correct OCL code */
 int blake256_test(unsigned char *pdata, const unsigned char *ptarget, uint32_t nonce)
 {
-	uint32_t tmp_hash7, Htarg = le32toh(((const uint32_t *)ptarget)[7]);
-	uint32_t data[20], ohash[8];
+	uint32_t tmp_hash7, Htarg = le32toh(((const uint32_t *)ptarget)[29]);
+	uint32_t data[45], ohash[8];
 
-	be32enc_vect(data, (const uint32_t *)pdata, 19);
-	data[19] = nonce;
+	be32enc_vect(data, (const uint32_t *)pdata, 45);
+	data[35] = nonce;
     
         applog(LOG_DEBUG, "Dat0: %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x", data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], data[9],
             data[10], data[11], data[12], data[13], data[14], data[15], data[16], data[17], data[18], data[19]);
+        applog(LOG_DEBUG, "Dat1: %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x", data[20], data[21], data[22], data[23], data[24], data[25], data[26], data[27], data[28], data[29],
+            data[30], data[31], data[32], data[33], data[34], data[35], data[36], data[37], data[38], data[39]);
+        applog(LOG_DEBUG, "Dat2: %x %x %x %x %x\n", data[40], data[41], data[42], data[43], data[44]);
     
     sph_blake256_context     ctx_blake;
     static unsigned char pblank[1];
     sph_blake256_init(&ctx_blake);
-    sph_blake256 (&ctx_blake, (unsigned char *)data, 80);
+    sph_blake256 (&ctx_blake, (unsigned char *)data, 180);
     sph_blake256_close(&ctx_blake, (unsigned char *)ohash);
 
 	flip32(ohash, ohash); // Not needed for scrypt-chacha - mikaelh

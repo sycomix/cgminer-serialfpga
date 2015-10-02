@@ -1101,6 +1101,7 @@ static cl_int queue_blake256_kernel(_clState *clState, dev_blk_ctx *blk, __maybe
 	cl_int status = 0;
         
 	CL_SET_ARG(clState->outputBuffer);
+	/* Midstate */
 	CL_SET_BLKARG(ctx_a);
 	CL_SET_BLKARG(ctx_b);
 	CL_SET_BLKARG(ctx_c);
@@ -1109,11 +1110,28 @@ static cl_int queue_blake256_kernel(_clState *clState, dev_blk_ctx *blk, __maybe
 	CL_SET_BLKARG(ctx_f);
 	CL_SET_BLKARG(ctx_g);
 	CL_SET_BLKARG(ctx_h);
-
+	
+	/* Last 52 bytes of message */
 	CL_SET_BLKARG(cty_a);
 	CL_SET_BLKARG(cty_b);
 	CL_SET_BLKARG(cty_c);
+	/* NONCE */
+	
+	CL_SET_BLKARG(cty_e);
+	CL_SET_BLKARG(cty_f);
+	CL_SET_BLKARG(cty_g);
+	CL_SET_BLKARG(cty_h);
 
+	CL_SET_BLKARG(cty_i);
+	CL_SET_BLKARG(cty_j);
+	CL_SET_BLKARG(cty_k);
+	CL_SET_BLKARG(cty_l);
+
+	CL_SET_BLKARG(cty_m);
+    /* Padding 0 */
+    /* Padding 1 */
+    /* Padding 2 */
+	
 	return status;
 }
 

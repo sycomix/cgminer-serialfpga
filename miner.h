@@ -729,6 +729,16 @@ static inline void flip128(void *dest_p, const void *src_p)
 		dest[i] = swab32(src[i]);
 }
 
+static inline void flip180(void *dest_p, const void *src_p)
+{
+	uint32_t *dest = dest_p;
+	const uint32_t *src = src_p;
+	int i;
+
+	for (i = 0; i < 45; i++)
+		dest[i] = swab32(src[i]);
+}
+
 /* For flipping to the correct endianness if necessary */
 #if defined(__BIG_ENDIAN__) || defined(MIPSEB)
 static inline void endian_flip32(void *dest_p, const void *src_p)
@@ -1207,11 +1217,19 @@ extern char *workpadding;
 
 #ifdef HAVE_OPENCL
 typedef struct {
+	/* 32-byte mid state */
 	cl_uint ctx_a; cl_uint ctx_b; cl_uint ctx_c; cl_uint ctx_d;
 	cl_uint ctx_e; cl_uint ctx_f; cl_uint ctx_g; cl_uint ctx_h;
+
+	/* 64-byte message chunks for a block */
 	cl_uint cty_a; cl_uint cty_b; cl_uint cty_c; cl_uint cty_d;
 	cl_uint cty_e; cl_uint cty_f; cl_uint cty_g; cl_uint cty_h;
+	cl_uint cty_i; cl_uint cty_j; cl_uint cty_k; cl_uint cty_l;
+	cl_uint cty_m; cl_uint cty_n; cl_uint cty_o; cl_uint cty_p;
+
 	cl_uint merkle; cl_uint ntime; cl_uint nbits; cl_uint nonce;
+
+	/* SHA256 related */
 	cl_uint fW0; cl_uint fW1; cl_uint fW2; cl_uint fW3; cl_uint fW15;
 	cl_uint fW01r; cl_uint fcty_e; cl_uint fcty_e2;
 	cl_uint W16; cl_uint W17; cl_uint W2;
@@ -1401,7 +1419,7 @@ struct pool {
 #define GETWORK_MODE_GBT 'G'
 
 struct work {
-	unsigned char	data[128];
+	unsigned char	data[192];
 	unsigned char	midstate[32];
 	unsigned char	target[32];
 	unsigned char	hash[32];

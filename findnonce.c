@@ -179,7 +179,7 @@ typedef struct
   uint32_t t;
 } blake_state256;
 
-#define NB_ROUNDS32 8
+#define NB_ROUNDS32 14
 
 const uint8_t blake_sigma[][16] =
 {
@@ -282,17 +282,30 @@ void blake256_update( blake_state256 *S, const uint32_t *in)
 {
 	uint32_t m[16];
 	int i;
-    S->t = 512;
+    S->t += 512;
     for(i = 0; i < 16; ++i )  m[i] = in[i];
+	applog(LOG_DEBUG, "In  : %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x", m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9],
+        m[10], m[11], m[12], m[13], m[14], m[15]);
     blake256_compress_block( S, m);
 }
 
 void precalc_hash_blake256(dev_blk_ctx *blk, uint32_t *state, uint32_t *data)
 {
+	uint32_t swap[45];
+	flip180(swap, data);
+	data = swap;
+	
 	blake_state256 S;
 	blake256_init( &S );
 	blake256_update( &S, data );
+	blake256_update( &S, data + 16 );
+	applog(LOG_DEBUG, "Msg0: %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x", data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], data[9],
+        data[10], data[11], data[12], data[13], data[14], data[15], data[16], data[17], data[18], data[19]);
+    applog(LOG_DEBUG, "Msg1: %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x", data[20], data[21], data[22], data[23], data[24], data[25], data[26], data[27], data[28], data[29],
+        data[30], data[31], data[32], data[33], data[34], data[35], data[36], data[37], data[38], data[39]);
+    applog(LOG_DEBUG, "Msg2: %x %x %x %x %x\n", data[40], data[41], data[42], data[43], data[44]);
 
+	/* Midstate after hashing first 128 bytes */
 	blk->ctx_a = S.h[0];
 	blk->ctx_b = S.h[1];
 	blk->ctx_c = S.h[2];
@@ -302,22 +315,25 @@ void precalc_hash_blake256(dev_blk_ctx *blk, uint32_t *state, uint32_t *data)
 	blk->ctx_g = S.h[6];
 	blk->ctx_h = S.h[7];
 	
-	blk->cty_a = data[16];
-	blk->cty_b = data[17];
-	blk->cty_c = data[18];
+	applog(LOG_DEBUG, "Midstate produced: %x %x %x %x %x %x %x %x", S.h[0], S.h[1], S.h[2], S.h[3], S.h[4], S.h[5], S.h[6], S.h[7]);
 	
-	// uchar 32, last 4 bytes FF000000 - is 000000FF target difficulty = 0-256, 8 words
-	/*
-	uint32_t *target32 = (uint32_t *)blk->work->target; 
-	blk->ctt_h = htole32(target32[7]);
-	blk->ctt_g = htole32(target32[6]);
-	blk->ctt_f = htole32(target32[5]);
-	blk->ctt_e = htole32(target32[4]);
-	blk->ctt_d = htole32(target32[3]);
-	blk->ctt_c = htole32(target32[2]);
-	blk->ctt_b = htole32(target32[1]);
-	blk->ctt_a = htole32(target32[0]);
-	*/
+	/* Last 52 bytes of the message */
+	blk->cty_a = data[32];
+	blk->cty_b = data[33];
+	blk->cty_c = data[34];
+	/* blk->cty_d = data[35] = nonce */
+
+	blk->cty_e = data[36];
+	blk->cty_f = data[37];
+	blk->cty_g = data[38];
+	blk->cty_h = data[39];
+
+	blk->cty_i = data[40];
+	blk->cty_j = data[41];
+	blk->cty_k = data[42];
+	blk->cty_l = data[43];
+
+	blk->cty_m = data[44];
 }
 
 struct pc_data {
@@ -350,7 +366,7 @@ static void *postcalc_hash(void *userdata)
 	for (entry = 0; entry < pcd->res[found]; entry++) {
 		uint32_t nonce = pcd->res[entry];
 
-		applog(LOG_DEBUG, "OCL NONCE %u found in slot %d", nonce, entry);
+		applog(LOG_DEBUG, "OCL NONCE %x found in slot %d", nonce, entry);
 		submit_nonce(thr, pcd->work, nonce);
 	}
 
