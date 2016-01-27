@@ -4136,16 +4136,26 @@ static int block_sort(struct block *blocka, struct block *blockb)
 /* Decode the current block difficulty which is in packed form */
 static void set_blockdiff(const struct work *work)
 {
-	uint8_t pow = work->data[72];
+	uint32_t* data_cast_as_32 = (uint32_t*) work->data;
+	uint32_t diff32BE = data_cast_as_32[29];
+	
+	/* Mask off the exponent and make it into a byte */
+	uint8_t pow = (uint8_t)((diff32BE&0xff000000)>>24);
+	 
+	/* Pop off the rest and shift it according to    */
+	/* the exponent. Divide mindiff by it.           */
+	/* Testnet has a different mindiff than mainnet  */
+	/* mindiff, this may calculate incorrectly on    */
+	/* testnet mining.                               */
 	int powdiff = (8 * (0x1d - 3)) - (8 * (pow - 3));
-	uint32_t diff32 = be32toh(*((uint32_t *)(work->data + 72))) & 0x00FFFFFF;
+	uint32_t diff32 = be32toh(diff32BE) & 0x00FFFFFF;
 	double numerator = 0xFFFFULL << powdiff;
 	double ddiff = numerator / (double)diff32;
 
 	if (unlikely(current_diff != ddiff)) {
 		suffix_string(ddiff, block_diff, sizeof(block_diff), 0);
 		current_diff = ddiff;
-		applog(LOG_NOTICE, "Network diff set to %s", block_diff);
+		applog(LOG_NOTICE, "Network diff set to %s (target %x)", block_diff, diff32BE);
 	}
 }
 
