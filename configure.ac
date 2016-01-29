@@ -115,23 +115,20 @@ case $target in
 	;;
 esac
 
+if test "x$have_x86_64" = xtrue; then
+	ARCH_DIR=x86_64
+else
+	ARCH_DIR=x86
+fi
 
-if test "x$have_win32" != xtrue; then
-	if test "x$have_x86_64" = xtrue; then
-		ARCH_DIR=x86_64
-	else
-		ARCH_DIR=x86
-	fi
+if test "x$ATISTREAMSDKROOT" != x; then
+	OPENCL_FLAGS="-I$ATISTREAMSDKROOT/include $OPENCL_FLAGS"
+	OPENCL_LIBS="-L$ATISTREAMSDKROOT/lib/$ARCH_DIR $OPENCL_LIBS"
+fi
 
-	if test "x$ATISTREAMSDKROOT" != x; then
-		OPENCL_FLAGS="-I$ATISTREAMSDKROOT/include $OPENCL_FLAGS"
-		OPENCL_LIBS="-L$ATISTREAMSDKROOT/lib/$ARCH_DIR $OPENCL_LIBS"
-	fi
-
-	if test "x$AMDAPPSDKROOT" != x; then
-		OPENCL_FLAGS="-I$AMDAPPSDKROOT/include $OPENCL_FLAGS"
-		OPENCL_LIBS="-L$AMDAPPSDKROOT/lib/$ARCH_DIR $OPENCL_LIBS"
-	fi
+if test "x$AMDAPPSDKROOT" != x; then
+	OPENCL_FLAGS="-I$AMDAPPSDKROOT/include $OPENCL_FLAGS"
+	OPENCL_LIBS="-L$AMDAPPSDKROOT/lib/$ARCH_DIR $OPENCL_LIBS"
 fi
 
 have_cgminer_sdk=false
@@ -179,17 +176,21 @@ else
 fi
 AM_CONDITIONAL([HAS_OPENCL], [test x$opencl = xyes])
 
-has_winpthread=false
-if test "x$have_win32" = xtrue; then
-        has_winpthread=true
-        AC_CHECK_LIB(winpthread, nanosleep, , has_winpthread=false)
-        PTHREAD_LIBS=-lwinpthread
-fi
+AC_CHECK_FUNCS([sleep])
 
-if test "x$has_winpthread" != xtrue; then
-        AC_CHECK_LIB(pthread, pthread_create, ,
-                AC_MSG_ERROR([Could not find pthread library - please install libpthread]))
-        PTHREAD_LIBS=-lpthread
+has_pthread=true
+AC_CHECK_LIB(pthread, pthread_create, ,has_pthread=false)
+
+if test x"$has_pthread" != xtrue; then
+	if test x"$have_win32" = xtrue; then
+		has_winpthread=true
+        AC_CHECK_LIB(winpthread, nanosleep, , has_winpthread=false)
+		AS_IF([test "x$has_winpthread" = xtrue], [PTHREAD_LIBS=-lwinpthread])
+	else
+		AC_MSG_ERROR([Could not find pthread library - please install libpthread])
+	fi
+else
+	PTHREAD_LIBS=-lpthread
 fi
 
 AC_ARG_ENABLE([adl],
@@ -350,6 +351,7 @@ else
 		curses=yes
 		cursesmsg="FOUND: ${ac_cv_search_addstr}"
 		AC_DEFINE([HAVE_CURSES], [1], [Defined to 1 if curses TUI support is wanted])
+		AC_CHECK_HEADERS([ncurses/ncurses.h])
 	], [
 		if test "x$curses" = "xyes"; then
 			AC_MSG_ERROR([Could not find curses library - please install libncurses-dev or pdcurses-dev (or configure --without-curses)])

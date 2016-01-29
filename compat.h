@@ -13,7 +13,7 @@
 
 #include <windows.h>
 
-#ifndef HAVE_LIBWINPTHREAD
+#if !defined(HAVE_LIBWINPTHREAD) && !defined(HAVE_LIBPTHREAD)
 static inline int nanosleep(const struct timespec *req, struct timespec *rem)
 {
 	struct timeval tstart;
@@ -47,6 +47,7 @@ static inline int nanosleep(const struct timespec *req, struct timespec *rem)
 }
 #endif
 
+#ifndef HAVE_SLEEP
 static inline int sleep(unsigned int secs)
 {
 	struct timespec req, rem;
@@ -56,6 +57,7 @@ static inline int sleep(unsigned int secs)
 		return 0;
 	return rem.tv_sec + (rem.tv_nsec ? 1 : 0);
 }
+#endif
 
 enum {
 	PRIO_PROCESS		= 0,
@@ -75,7 +77,7 @@ typedef unsigned int uint;
 typedef long suseconds_t;
 #endif
 
-#ifdef HAVE_LIBWINPTHREAD
+#if defined(HAVE_LIBWINPTHREAD) || defined(HAVE_LIBPTHREAD)
 #define PTH(thr) ((thr)->pth)
 #else
 #define PTH(thr) ((thr)->pth.p)

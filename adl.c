@@ -16,7 +16,11 @@
 #include <math.h>
 
 #ifdef HAVE_CURSES
-#include <curses.h>
+#ifdef HAVE_NCURSES_NCURSES_H
+#  include <ncurses/ncurses.h>
+#else
+#  include <curses.h>
+#endif
 #endif
 
 #include "miner.h"
