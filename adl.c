@@ -9,7 +9,7 @@
 
 #include "config.h"
 
-#if defined(HAVE_ADL) && (defined(__linux) || defined (WIN32))
+#if defined(HAVE_ADL) && (defined(__linux__) || defined (WIN32))
 
 #include <stdio.h>
 #include <string.h>

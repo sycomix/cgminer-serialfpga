@@ -203,10 +203,15 @@ scrypt="no"
 if test "$found_opencl" = 1; then
 	if test "x$adl" != xno; then
 		ADL_CPPFLAGS=
+		dnl Look for ADL headers in a way that doesn't break cross-compile configs.
 		SAVED_CFLAGS=$CFLAGS
 		CFLAGS="$CFLAGS -I$srcdir"
+		dnl miner.h ensures LINUX is defined for native Linux compilation.
 		AC_CHECK_HEADER([ADL_SDK/adl_sdk.h], [have_adl=true; ADL_CPPFLAGS=-I$srcdir], [have_adl=false], 
-			[ [#include <stddef.h>] ])
+			[#if defined (__linux__) && !defined(LINUX)
+			 #  define LINUX
+			 #endif
+			 AC_INCLUDES_DEFAULT()])
 		CFLAGS=$SAVED_CFLAGS
 		if test x$have_adl+$have_cgminer_sdk = xfalse+true; then
 			AC_CHECK_HEADER([$CGMINER_SDK/include/ADL_SDK/adl_sdk.h], [have_adl=true; ADL_CPPFLAGS=-I$CGMINER_SDK/include], [have_adl=false],[])
