@@ -4258,21 +4258,11 @@ static void set_blockdiff(const struct work *work)
 	uint32_t* data_cast_as_32 = (uint32_t*) work->data;
 	uint32_t diff32BE = data_cast_as_32[29];
 
-	int nShift = (diff32BE >> 24) & 0xff;
-
-	double ddiff =
-		(double)0x0000ffff / (double)(diff32BE & 0x00ffffff);
-
-	while (ddiff < 29)
-	{
-		ddiff *= 256.0;
-		nShift++;
-	}
-	while (nShift > 29)
-	{
-		ddiff /= 256.0;
-		nShift--;
-	}
+	uint8_t exp = (diff32BE >> 24) & 0xFF;
+	int powdiff = (8 * (0x1d - 3)) - (8 * (exp - 3));
+	uint32_t diff32 = diff32BE & 0x00FFFFFF;
+	double numerator = 0xFFFFULL << powdiff;
+	double ddiff = numerator / (double)diff32;
 
 	if (unlikely(current_diff != ddiff)) {
 		suffix_string(ddiff, block_diff, sizeof(block_diff), 0);
