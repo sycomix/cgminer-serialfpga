@@ -3110,6 +3110,7 @@ static bool get_upstream_work(struct work *work, CURL *curl)
 
 	work->pool = pool;
 	work->longpoll = false;
+	work->MidstateValid = false;
 	work->getwork_mode = GETWORK_MODE_POOL;
 	calc_diff(work, 0);
 	total_getworks++;
@@ -3617,7 +3618,7 @@ static void roll_work(struct work *work)
 	uint32_t *work_ntime;
 	uint32_t ntime;
 
-	work_ntime = (uint32_t *)(work->data + 136);
+	work_ntime = (uint32_t *)(work->data + 144);
 	ntime = *work_ntime;
 	ntime++;
 	*work_ntime = ntime;
@@ -6287,6 +6288,7 @@ struct work *get_work(struct thr_info *thr, const int thr_id)
 	thread_reportin(thr);
 	work->mined = true;
 	work->device_diff = MIN(thr->cgpu->drv->max_diff, work->work_difficulty);
+	work->MidstateValid = false;
 	return work;
 }
 

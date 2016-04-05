@@ -1430,7 +1430,8 @@ struct work {
 	int		drv_rolllimit; /* How much the driver can roll ntime */
 
 	dev_blk_ctx	blk;
-
+	bool MidstateValid;
+	
 	struct thr_info	*thr;
 	int		thr_id;
 	struct pool	*pool;
