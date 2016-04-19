@@ -44,3 +44,13 @@ lib/warn-on-use.h
 mkinstalldirs
 
 *.swp
+
+ccan/opt/.dirstamp
+libtool
+ltmain.sh
+compat/jansson-2.5/jansson.pc
+compat/jansson-2.5/src/.libs/
+compat/jansson-2.5/src/jansson_config.h
+compat/jansson-2.5/src/libjansson.la
+*.lo
+m4/
