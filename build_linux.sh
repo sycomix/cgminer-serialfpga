@@ -10,6 +10,8 @@ set -e
 # 2016/04/25
 # jcv@decred.org
 
+REPO_DIR=$PWD
+
 touch build.log
 
 echo "Downloading dependencies if needed."
@@ -65,10 +67,10 @@ then
     echo "ADL headers not found in $PWD.  Download ADL_SDK9.zip from http://developer.amd.com/tools-and-sdks/graphics-development/display-library-adl-sdk/"
     exit
 fi
-cp $ADL cgminer/ADL_SDK/
-cd cgminer/ADL_SDK/
-unzip -q $ADL
-cp include/* .
+cp $ADL $REPO_DIR/ADL_SDK/
+cd $REPO_DIR/ADL_SDK/
+unzip -qo $ADL
+cp -f include/* .
 
 echo "Building cgminer."
 cd ..
