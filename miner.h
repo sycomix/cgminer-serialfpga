@@ -237,6 +237,8 @@ static inline int fsync (int fd)
  * update all macros in the code that use the *_PARSE_COMMANDS macros for each
  * listed driver. */
 #define FPGA_PARSE_COMMANDS(DRIVER_ADD_COMMAND) \
+	DRIVER_ADD_COMMAND(serial_fpga) \
+	DRIVER_ADD_COMMAND(ztex) \
 	DRIVER_ADD_COMMAND(bitforce) \
 	DRIVER_ADD_COMMAND(icarus) \
 	DRIVER_ADD_COMMAND(modminer)
@@ -474,6 +476,9 @@ struct cgpu_info {
 	char *name;
 	char *device_path;
 	void *device_data;
+#ifdef USE_ZTEX
+	struct libztex_device *device_ztex;
+#endif
 #ifdef USE_USBUTILS
 	struct cg_usb_device *usbdev;
 #endif
@@ -1048,6 +1053,7 @@ extern bool opt_restart;
 extern bool opt_nogpu;
 extern char *opt_icarus_options;
 extern char *opt_icarus_timing;
+extern char *opt_ztex_clock;
 extern bool opt_worktime;
 #ifdef USE_AVALON
 extern char *opt_avalon_options;
@@ -1151,34 +1157,21 @@ extern bool add_pool_details(struct pool *pool, bool live, char *url, char *user
 #define MAX_SHA_INTENSITY_STR "14"
 #define MIN_SCRYPT_INTENSITY 8
 #define MIN_SCRYPT_INTENSITY_STR "8"
-#define MAX_SCRYPT_INTENSITY 31
-#define MAX_SCRYPT_INTENSITY_STR "31"
-/*
+#define MAX_SCRYPT_INTENSITY 20
+#define MAX_SCRYPT_INTENSITY_STR "20"
 #ifdef USE_SCRYPT
 #define MIN_INTENSITY (opt_scrypt ? MIN_SCRYPT_INTENSITY : MIN_SHA_INTENSITY)
 #define MIN_INTENSITY_STR (opt_scrypt ? MIN_SCRYPT_INTENSITY_STR : MIN_SHA_INTENSITY_STR)
 #define MAX_INTENSITY (opt_scrypt ? MAX_SCRYPT_INTENSITY : MAX_SHA_INTENSITY)
 #define MAX_INTENSITY_STR (opt_scrypt ? MAX_SCRYPT_INTENSITY_STR : MAX_SHA_INTENSITY_STR)
 #define MAX_GPU_INTENSITY MAX_SCRYPT_INTENSITY
-#define MIN_INTENSITY (opt_blake256 ? MIN_SCRYPT_INTENSITY : MIN_SHA_INTENSITY)
-#define MIN_INTENSITY_STR (opt_blake256 ? MIN_SCRYPT_INTENSITY_STR : MIN_SHA_INTENSITY_STR)
-#define MAX_INTENSITY (opt_blake256 ? MAX_SCRYPT_INTENSITY : MAX_SHA_INTENSITY)
-#define MAX_INTENSITY_STR (opt_blake256 ? MAX_SCRYPT_INTENSITY_STR : MAX_SHA_INTENSITY_STR)
-#define MAX_GPU_INTENSITY (opt_blake256 ? MAX_SCRYPT_INTENSITY : MAX_SHA_INTENSITY)
 #else
-#define MIN_INTENSITY (opt_blake256 ? MIN_SCRYPT_INTENSITY : MIN_SHA_INTENSITY)
-#define MIN_INTENSITY_STR (opt_blake256 ? MIN_SCRYPT_INTENSITY_STR : MIN_SHA_INTENSITY_STR)
-#define MAX_INTENSITY (opt_blake256 ? MAX_SCRYPT_INTENSITY : MAX_SHA_INTENSITY)
-#define MAX_INTENSITY_STR (opt_blake256 ? MAX_SCRYPT_INTENSITY_STR : MAX_SHA_INTENSITY_STR)
-#define MAX_GPU_INTENSITY (opt_blake256 ? MAX_SCRYPT_INTENSITY : MAX_SHA_INTENSITY)
+#define MIN_INTENSITY MIN_SHA_INTENSITY
+#define MIN_INTENSITY_STR MIN_SHA_INTENSITY_STR
+#define MAX_INTENSITY MAX_SHA_INTENSITY
+#define MAX_INTENSITY_STR MAX_SHA_INTENSITY_STR
+#define MAX_GPU_INTENSITY MAX_SHA_INTENSITY
 #endif
-*/
-
-#define MIN_INTENSITY		8
-#define MIN_INTENSITY_STR	"8"
-#define MAX_INTENSITY		31
-#define MAX_INTENSITY_STR	"31"
-#define MAX_GPU_INTENSITY	31
 
 extern bool hotplug_mode;
 extern int hotplug_time;
@@ -1443,8 +1436,7 @@ struct work {
 	int		drv_rolllimit; /* How much the driver can roll ntime */
 
 	dev_blk_ctx	blk;
-	bool MidstateValid;
-	
+
 	struct thr_info	*thr;
 	int		thr_id;
 	struct pool	*pool;
@@ -1584,6 +1576,7 @@ extern struct work *copy_work_noffset(struct work *base_work, int noffset);
 #define copy_work(work_in) copy_work_noffset(work_in, 0)
 extern struct thr_info *get_thread(int thr_id);
 extern struct cgpu_info *get_devices(int id);
+
 
 enum api_data_type {
 	API_ESCAPE,

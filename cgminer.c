@@ -9,6 +9,12 @@
  * any later version.  See COPYING for more details.
  */
 
+
+#define USE_ZTEX
+#define USE_FPGA
+#define USE_FPGA_SERIAL
+#undef USE_ICARUS
+
 #include "config.h"
 
 #ifdef HAVE_CURSES
@@ -62,9 +68,26 @@ char *curly = ":D";
 #include "driver-opencl.h"
 #include "bench_block.h"
 #include "scrypt.h"
+#include "blake.c"
+
 #ifdef USE_USBUTILS
 #include "usbutils.h"
 #endif
+
+
+#ifdef USE_FPGA
+#include "fpgautils.c"
+#endif
+
+#ifdef USE_ZTEX
+#include "libztex.c"
+#include "driver-ztex.c"
+#endif
+
+#ifdef USE_FPGA_SERIAL
+#include "driver-serialfpga.c"
+#endif
+
 
 #if defined(unix) || defined(__APPLE__)
 	#include <errno.h>
@@ -84,9 +107,6 @@ char *curly = ":D";
 #include "driver-hashfast.h"
 #endif
 
-#if defined(USE_BITFORCE) || defined(USE_ICARUS) || defined(USE_AVALON) || defined(USE_MODMINER)
-#	define USE_FPGA
-#endif
 
 /* Secure random generation to create unique nonces on 
  * both Windows and Linux 
@@ -188,8 +208,8 @@ int gpu_threads;
 #ifdef USE_SCRYPT
 bool opt_scrypt;
 #endif
-bool opt_blake256;
 #endif
+bool opt_blake256;
 bool opt_restart = true;
 bool opt_nogpu;
 
@@ -234,6 +254,7 @@ bool opt_disable_pool;
 static bool no_work;
 char *opt_icarus_options = NULL;
 char *opt_icarus_timing = NULL;
+char *opt_ztex_clock = NULL;
 bool opt_worktime;
 #ifdef USE_AVALON
 char *opt_avalon_options = NULL;
@@ -1166,6 +1187,15 @@ static char *set_klondike_options(const char *arg)
 }
 #endif
 
+#ifdef USE_ZTEX
+static char *set_ztex_clock(const char *arg)	// KRAMBLE
+{
+	opt_set_charp(arg, &opt_ztex_clock);
+
+	return NULL;
+}
+#endif
+
 #ifdef USE_USBUTILS
 static char *set_usb_select(const char *arg)
 {
@@ -1350,6 +1380,11 @@ static struct opt_table opt_config_table[] = {
 		     opt_hidden),
 	OPT_WITH_ARG("--icarus-timing",
 		     set_icarus_timing, NULL, NULL,
+		     opt_hidden),
+#endif
+#ifdef USE_ZTEX
+	OPT_WITH_ARG("--ztex-clock",				// KRAMBLE
+		     set_ztex_clock, NULL, NULL,
 		     opt_hidden),
 #endif
 #ifdef USE_AVALON
@@ -1744,6 +1779,9 @@ static char *opt_verusage_and_exit(const char *extra)
 #ifdef USE_MODMINER
 		"modminer "
 #endif
+#ifdef USE_ZTEX
+		"ztex "
+#endif
 #ifdef USE_SCRYPT
 		"scrypt "
 #endif
@@ -1824,19 +1862,6 @@ static bool jobj_binary(const json_t *obj, const char *key,
 }
 #endif
 
-static void calc_midstate(struct work *work)
-{
-	unsigned char data[64];
-	uint32_t *data32 = (uint32_t *)data;
-	sha256_ctx ctx;
-
-	flip64(data32, work->data);
-	sha256_init(&ctx);
-	sha256_update(&ctx, data, 64);
-	memcpy(work->midstate, ctx.h, 32);
-	endian_flip32(work->midstate, work->midstate);
-}
-
 static struct work *make_work(void)
 {
 	struct work *work = calloc(1, sizeof(struct work));
@@ -1868,6 +1893,64 @@ void free_work(struct work *work)
 {
 	clean_work(work);
 	free(work);
+}
+
+uint32_t ztex_checkNonce(struct work *work, uint32_t nonce)
+{
+	uint32_t data[45];
+	unsigned char hash[32];
+	uint32_t *ohash = (uint32_t *)(hash);
+
+	be32enc_vect(data, (const uint32_t *)work->data, 45);
+	data[35] = nonce;
+        
+	uint32_t swap[45];
+	flip180(swap, data);
+	int i;
+	for (i=0; i<45; ++i) {
+		data[i] = swap[i];
+	}
+	
+    sph_blake256_context ctx_blake;
+    sph_blake256_init(&ctx_blake);
+    sph_blake256 (&ctx_blake, (unsigned char *)data, 180);
+    sph_blake256_close(&ctx_blake, (unsigned char *)ohash);
+
+//unsigned char* b = (unsigned char*)(ohash);
+//applog(LOG_WARNING, "Check Hash: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x", b[0],b[1],b[2],b[3],b[4],b[5],b[6],b[7],b[8],b[9],b[10],b[11],b[12],b[13],b[14],b[15],b[16],b[17],b[18],b[19],b[20],b[21],b[22],b[23],b[24],b[25],b[26],b[27],b[28],b[29],b[30],b[31]);
+
+	return htonl(ohash[7]);
+}
+
+void calc_midstate(struct work *work)
+{
+	uint32_t data[45];
+
+	be32enc_vect(data, (const uint32_t *)work->data, 45);
+
+
+	uint32_t swap[45];
+	flip180(swap, data);
+	int i;
+	for (i=0; i<45; ++i) {
+		data[i] = swap[i];
+	}
+
+    sph_blake256_context     ctx_blake;
+    sph_blake256_init(&ctx_blake);
+    sph_blake256 (&ctx_blake, (unsigned char *)data, 180);
+//    sph_blake256_close(&ctx_blake, (unsigned char *)ohash);
+	
+	memcpy(work->midstate, ctx_blake.H, 32);
+	
+//unsigned char* b = (unsigned char*)(data);
+//applog(LOG_WARNING, "D1: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x", b[0],b[1],b[2],b[3],b[4],b[5],b[6],b[7],b[8],b[9],b[10],b[11],b[12],b[13],b[14],b[15],b[16],b[17],b[18],b[19],b[20],b[21],b[22],b[23],b[24],b[25],b[26],b[27],b[28],b[29],b[30],b[31],b[32],b[33],b[34],b[35],b[36],b[37],b[38],b[39],b[40],b[41],b[42],b[43],b[44],b[45],b[46],b[47],b[48],b[49],b[50],b[51],b[52],b[53],b[54],b[55],b[56],b[57],b[58],b[59],b[60],b[61],b[62],b[63] );
+//applog(LOG_WARNING, "D2: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x", b[64],b[65],b[66],b[67],b[68],b[69],b[70],b[71],b[72],b[73],b[74],b[75],b[76],b[77],b[78],b[79],b[80],b[81],b[82],b[83],b[84],b[85],b[86],b[87],b[88],b[89],b[90],b[91],b[92],b[93],b[94],b[95],b[96],b[97],b[98],b[99],b[100],b[101],b[102],b[103],b[104],b[105],b[106],b[107],b[108],b[109],b[110],b[111],b[112],b[113],b[114],b[115],b[116],b[117],b[118],b[119],b[120],b[121],b[122],b[123],b[124],b[125],b[126],b[127] );
+//applog(LOG_WARNING, "D3: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x", b[128],b[129],b[130],b[131],b[132],b[133],b[134],b[135],b[136],b[137],b[138],b[139],b[140],b[141],b[142],b[143],b[144],b[145],b[146],b[147],b[148],b[149],b[150],b[151],b[152],b[153],b[154],b[155],b[156],b[157],b[158],b[159],b[160],b[161],b[162],b[163],b[164],b[165],b[166],b[167],b[168],b[169],b[170],b[171],b[172],b[173],b[174],b[175],b[176],b[177],b[178],b[179] );
+
+//uint32_t* c = (uint32_t*)(work->midstate);
+//applog(LOG_WARNING, "Mid: %08x%08x%08x%08x%08x%08x%08x%08x", c[0],c[1],c[2],c[3],c[4],c[5],c[6],c[7]);
+
 }
 
 static void gen_hash(unsigned char *data, unsigned char *hash, int len);
@@ -2826,7 +2909,10 @@ static void show_hash(struct work *work, char *hashshow)
 	char diffdisp[16];
 	unsigned long h32;
 	uint32_t *hash32;
+	uint32_t *data32;
 	int intdiff, ofs;
+
+	data32 = (uint32_t *)work->data;
 
 	swab256(rhash, work->hash);
 	for (ofs = 0; ofs <= 28; ofs ++) {
@@ -2837,8 +2923,10 @@ static void show_hash(struct work *work, char *hashshow)
 	h32 = be32toh(*hash32);
 	intdiff = round(work->work_difficulty);
 	suffix_string(work->share_diff, diffdisp, sizeof (diffdisp), 0);
-	snprintf(hashshow, 64, "%08lx Diff %s/%d%s", h32, diffdisp, intdiff,
-		 work->block? " BLOCK!" : "");
+        snprintf(hashshow, 64, "%08X Diff %s/%d%s", data32[35], diffdisp, intdiff,
+                 work->block? " BLOCK!" : "");
+//	snprintf(hashshow, 64, "%08lx Diff %s/%d%s", h32, diffdisp, intdiff,
+//		 work->block? " BLOCK!" : "");
 }
 
 #ifdef HAVE_LIBCURL
@@ -3110,7 +3198,6 @@ static bool get_upstream_work(struct work *work, CURL *curl)
 
 	work->pool = pool;
 	work->longpoll = false;
-	work->MidstateValid = false;
 	work->getwork_mode = GETWORK_MODE_POOL;
 	calc_diff(work, 0);
 	total_getworks++;
@@ -3618,7 +3705,7 @@ static void roll_work(struct work *work)
 	uint32_t *work_ntime;
 	uint32_t ntime;
 
-	work_ntime = (uint32_t *)(work->data + 144);
+	work_ntime = (uint32_t *)(work->data + 136);
 	ntime = *work_ntime;
 	ntime++;
 	*work_ntime = ntime;
@@ -5247,7 +5334,8 @@ static void *api_thread(void *userdata)
 
 	api(api_thr_id);
 
-	PTH(mythr) = 0L;
+/**********Fix************/	
+//	PTH(mythr) = 0L;
 
 	return NULL;
 }
@@ -6281,14 +6369,20 @@ struct work *get_work(struct thr_info *thr, const int thr_id)
 	uint64_t r_uint64 = next();
 	mutex_unlock(&xor_prng_lock);
 	applog(LOG_DEBUG, "Assigning unique work ID %x, %x", (uint32_t)(r_uint64 >> 32), (uint32_t)r_uint64);
+
+	//Test Data For ZTEX / Serial FPGAs
+	//Hash: 0000000000219dcdba6306f9a8711cd4052ffa7735325c9d96a6918ab70767ae
+	//Nonce: 0x96a07255
+	//unsigned char block_header[] = { 0x00, 0x00, 0x00, 0x00, 0xb1, 0x97, 0xbc, 0xb8, 0xef, 0x5b, 0xb0, 0xfe, 0x61, 0x0a, 0x56, 0xa2, 0xfb, 0x07, 0x96, 0xf2, 0xab, 0x4e, 0x5a, 0x44, 0x9c, 0x95, 0x65, 0xd2, 0xbb, 0x04, 0x58, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0xbb, 0x38, 0x9f, 0x0b, 0x2f, 0xeb, 0x15, 0xb6, 0x6e, 0x25, 0xe4, 0xbd, 0x79, 0xe7, 0xee, 0xd9, 0xcd, 0x9b, 0xcb, 0xa5, 0x80, 0x4e, 0xc4, 0xfd, 0x8a, 0xa7, 0x85, 0x1b, 0x70, 0x84, 0x2d, 0x06, 0x82, 0x49, 0xce, 0x9f, 0x0c, 0x3e, 0x9f, 0x39, 0x23, 0x90, 0x5e, 0x4b, 0x74, 0x6d, 0x9d, 0x75, 0x30, 0xcf, 0xf8, 0xaf, 0x75, 0x7c, 0x8d, 0x63, 0xdd, 0x23, 0xbf, 0x16, 0x83, 0x25, 0x69, 0x00, 0x00, 0xb6, 0x05, 0x77, 0x86, 0x94, 0x89, 0x04, 0x00, 0x00, 0x00, 0xef, 0x1d, 0x00, 0x00, 0x5b, 0x9f, 0x00, 0x1c, 0x7f, 0x33, 0xc9, 0x60, 0x04, 0x00, 0x00, 0x00, 0x91, 0x07, 0x00, 0x00, 0xd1, 0x06, 0x00, 0x00, 0x89, 0x3c, 0xaa, 0x56, 0x96, 0xa0, 0x72, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+	//memcpy(work->data, block_header, 180);
+	
 	data_cast_as_32[36] = (uint32_t)(r_uint64 >> 32);
 	data_cast_as_32[37] = (uint32_t)r_uint64;
-
+	
 	work->thr_id = thr_id;
 	thread_reportin(thr);
 	work->mined = true;
 	work->device_diff = MIN(thr->cgpu->drv->max_diff, work->work_difficulty);
-	work->MidstateValid = false;
 	return work;
 }
 
@@ -6302,11 +6396,11 @@ static void submit_work_async(struct work *work)
 
 	if (stale_work(work, true)) {
 		if (opt_submit_stale)
-			applog(LOG_NOTICE, "Pool %d stale share detected, submitting as user requested", pool->pool_no);
+			applog(LOG_NOTICE, "Pool %d stale share detected, submitting...", pool->pool_no);
 		else if (pool->submit_old)
-			applog(LOG_NOTICE, "Pool %d stale share detected, submitting as pool requested", pool->pool_no);
+			applog(LOG_NOTICE, "Pool %d stale share detected, submitting...", pool->pool_no);
 		else {
-			applog(LOG_NOTICE, "Pool %d stale share detected, discarding", pool->pool_no);
+			applog(LOG_NOTICE, "Pool %d stale share detected, discarding...", pool->pool_no);
 			sharelog("discard", work);
 
 			mutex_lock(&stats_lock);
@@ -6403,9 +6497,16 @@ static void update_work_stats(struct thr_info *thr, struct work *work)
 	}
 
 	mutex_lock(&stats_lock);
-	total_diff1 += work->device_diff;
-	thr->cgpu->diff1 += work->device_diff;
-	work->pool->diff1 += work->device_diff;
+	if (work->device_diff > 1) {
+		total_diff1 += work->device_diff;
+		thr->cgpu->diff1 += work->device_diff;
+		work->pool->diff1 += work->device_diff;
+	}
+        else {
+	        total_diff1 += 1;
+        	thr->cgpu->diff1 += 1;
+	        work->pool->diff1 += 1;
+        }
 	thr->cgpu->last_device_valid_work = time(NULL);
 	mutex_unlock(&stats_lock);
 }
@@ -6542,7 +6643,7 @@ static void hash_sole_work(struct thr_info *mythr)
 			cgtime(&tv_start);
 			uint32_t *data_cast_as_32;
 			data_cast_as_32 = (uint32_t*) work->data;
-			
+
 			/* Occasionally update the extra nonce */
 			if (!(counter & 0x00FF)) {
 				data_cast_as_32[38]++;
@@ -6560,7 +6661,7 @@ static void hash_sole_work(struct thr_info *mythr)
                     data_cast_as_32[9], data_cast_as_32[36], data_cast_as_32[37], data_cast_as_32[38], data_cast_as_32[39], counter);
 			}
 			counter++;
-		
+			
 			work->device_diff = MIN(drv->working_diff, work->work_difficulty);
 				cgtime(&tv_start);
 

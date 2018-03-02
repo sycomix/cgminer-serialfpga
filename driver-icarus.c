@@ -1027,7 +1027,10 @@ shin:
 
 static void icarus_detect(bool __maybe_unused hotplug)
 {
-	usb_detect(&icarus_drv, icarus_detect_one);
+//
+//  Turned off while testing serial_fpga
+//
+//	usb_detect(&icarus_drv, icarus_detect_one);
 }
 
 static bool icarus_prepare(__maybe_unused struct thr_info *thr)
