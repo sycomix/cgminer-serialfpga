@@ -27,7 +27,7 @@ import serial
 import binascii
 
 if len(sys.argv) < 2:
-	sys.stderr.write("usAge: " + sys.argv[0] + " device strings...\n")
+	sys.stderr.write(f"usAge: {sys.argv[0]}" + " device strings...\n")
 	sys.stderr.write(" where device is either like /dev/ttyUSB0 or COM1\n")
 	sys.stderr.write(" and strings are either '0xXXXX' or 'text'\n")
 	sys.stderr.write(" if the first string is 'icarus' the rest are ignored\n")
@@ -49,28 +49,25 @@ if sys.argv[2] == "icarus":
 	rmid    = midstate.decode('hex')[::-1]
 	payload = rmid + rdata2
 
-	print("Push payload to icarus: " + binascii.hexlify(payload))
+	print(f"Push payload to icarus: {binascii.hexlify(payload)}")
 	ser.write(payload)
 
 	b=ser.read(4)
-	print("Result:(should be: 063c5e01): " + binascii.hexlify(b))
+	print(f"Result:(should be: 063c5e01): {binascii.hexlify(b)}")
 
 	# Just another test
 	payload2 = "ce92099c5a80bb81c52990d5c0924c625fd25a535640607d5a4bdf8174e2c8d500000000000000000000000080000000000000000b290c1a42313b4f21b5bcb8"
-	print("Push payload to icarus: " + payload2)
+	print(f"Push payload to icarus: {payload2}")
 	ser.write(payload2.decode('hex'))
 
 	b=ser.read(4)
-	print("Result:(should be: 8e0b31c5): " + binascii.hexlify(b))
+	print(f"Result:(should be: 8e0b31c5): {binascii.hexlify(b)}")
 else:
-	data = ""
-	for arg in sys.argv[2::]:
-		if arg[0:2:] == '0x':
-			data += arg[2::].decode('hex')
-		else:
-			data += arg
-
-	print("Sending: 0x" + binascii.hexlify(data))
+	data = "".join(
+		arg[2::].decode('hex') if arg[:2] == '0x' else arg
+		for arg in sys.argv[2::]
+	)
+	print(f"Sending: 0x{binascii.hexlify(data)}")
 	ser.write(data)
 
 	# If you're expecting more than one linefeed terminated reply,
@@ -78,9 +75,9 @@ else:
 	# AND with no linefeed, this will wait the 10 seconds before returning
 	print("Waiting up to 10 seconds ...")
 	b=ser.readline()
-	print("Result: hex 0x" + binascii.hexlify(b))
+	print(f"Result: hex 0x{binascii.hexlify(b)}")
 
 	# This could mess up the display - do it last
-	print("Result: asc '" + b + "'")
+	print(f"Result: asc '{b}'")
 
 ser.close()
